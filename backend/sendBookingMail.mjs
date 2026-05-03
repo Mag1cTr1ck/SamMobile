@@ -97,14 +97,21 @@ function servicesBlockHtml(booking) {
   return `<p>${escapeHtml(keys.join(", ") || "As booked online")}</p>`
 }
 
+/** Sam logo: large, right-aligned. Block + no line-height:0 avoids top clipping in Gmail/Outlook. */
+const SAMS_EMAIL_LOGO_W = 240
+
 function logoHeaderHtml() {
   if (!existsSync(SAMS_LOGO_PATH)) return ""
-  return `<div style="margin:0 0 0.35rem"><img src="cid:${SAMS_LOGO_CID}" alt="${escapeHtml(BUSINESS_NAME)} logo" width="88" height="14" style="display:block;width:88px;max-width:88px;height:14px;max-height:14px;border:0;outline:none;text-decoration:none"/></div>`
+  const w = SAMS_EMAIL_LOGO_W
+  return `<div style="margin:0 0 12px;padding-top:8px;padding-bottom:2px;overflow:visible"><img src="cid:${SAMS_LOGO_CID}" alt="${escapeHtml(BUSINESS_NAME)} logo" width="${w}" border="0" style="display:block;margin-left:auto;margin-right:0;width:${w}px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;vertical-align:top"/></div>`
 }
+
+/** 345 footer: small; explicit width (many clients ignore max-width alone on CID images). */
+const STUDIO_EMAIL_LOGO_W = 72
 
 function logoFooterHtml() {
   if (!existsSync(STUDIO_LOGO_PATH)) return ""
-  return `<a href="https://345studio.ky" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:1rem;line-height:0"><img src="cid:${STUDIO_LOGO_CID}" alt="345Studio" style="display:block;max-width:200px;width:auto;height:auto;border:0;outline:none;text-decoration:none"/></a>`
+  return `<a href="https://345studio.ky" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:1rem"><img src="cid:${STUDIO_LOGO_CID}" alt="345Studio" width="${STUDIO_EMAIL_LOGO_W}" border="0" style="display:block;width:${STUDIO_EMAIL_LOGO_W}px;max-width:${STUDIO_EMAIL_LOGO_W}px;height:auto;border:0;outline:none;text-decoration:none"/></a>`
 }
 
 function inlineLogoAttachments() {
@@ -155,7 +162,7 @@ We will meet you at your service location during the time window above. If you n
 `
   const html = `<!DOCTYPE html>
 <html>
-<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;max-width:8rem">
+<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;max-width:40rem;margin:0;padding:16px 20px 24px">
   ${logoHeaderHtml()}
   <p>Hi ${escapeHtml(booking.contactName)},</p>
   <p>Thank you for booking with <strong>${escapeHtml(BUSINESS_NAME)}</strong>.</p>
@@ -211,7 +218,7 @@ ${est}
 `
   const html = `<!DOCTYPE html>
 <html>
-<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;max-width:40rem">
+<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;max-width:40rem;margin:0;padding:16px 20px 24px">
   ${logoHeaderHtml()}
   <h1 style="font-size:1.1rem">New web booking</h1>
   <p><strong>Booking ID:</strong> ${escapeHtml(booking.id)}<br/>
@@ -283,6 +290,33 @@ export async function sendBookingMails(booking) {
   const internal = buildBusinessMail(booking, businessInbox)
   const attachments = inlineLogoAttachments()
 
+  /**
+   * Optional: verified sender for staff “new booking” mail when it must differ from MAIL_FROM_EMAIL
+   * (e.g. notifications@samsmobile.ky → sam@samsmobile.ky). If unset, defaults to MAIL_FROM_EMAIL.
+   */
+  const internalFromEmail = process.env.MAIL_INTERNAL_FROM_EMAIL?.trim() || fromEmail
+  const internalFromName =
+    process.env.MAIL_INTERNAL_FROM_NAME?.trim() || `${fromName} · Bookings`
+
+  const fromNorm = fromEmail.trim().toLowerCase()
+  const businessNorm = businessInbox.trim().toLowerCase()
+  const customerNorm = String(booking.contactEmail ?? "")
+    .trim()
+    .toLowerCase()
+  const internalFromNorm = internalFromEmail.trim().toLowerCase()
+
+  const fromEqualsBusiness = fromNorm === businessNorm
+  const customerIsBusiness = customerNorm === businessNorm
+  /** Second SMTP message can use a different From than the business inbox (avoids From === To rejections). */
+  const internalFromDiffersFromInbox = internalFromNorm !== businessNorm
+
+  /**
+   * When From and business inbox are the same address, a separate “to: sam@” message is often dropped.
+   * BCC that mailbox on the customer email unless MAIL_INTERNAL_FROM_EMAIL gives another verified From.
+   */
+  const useBccStaffCopyOnCustomer =
+    fromEqualsBusiness && !customerIsBusiness && !internalFromDiffersFromInbox
+
   let customerSent = false
   let businessSent = false
   let customerError = ""
@@ -291,6 +325,7 @@ export async function sendBookingMails(booking) {
   try {
     await transport.sendMail({
       to: booking.contactEmail,
+      ...(useBccStaffCopyOnCustomer ? { bcc: businessInbox } : {}),
       from: `${fromName} <${fromEmail}>`,
       replyTo: businessInbox,
       subject: customer.subject,
@@ -299,29 +334,42 @@ export async function sendBookingMails(booking) {
       attachments,
     })
     customerSent = true
+    if (useBccStaffCopyOnCustomer) {
+      businessSent = true
+      console.log(
+        "[bookings] MAIL_FROM_EMAIL equals business inbox — staff copy via BCC on customer mail (or set MAIL_INTERNAL_FROM_EMAIL for a separate “new booking” From).",
+      )
+    }
   } catch (err) {
     customerError = err?.message ?? "smtp_error"
     console.error("[bookings] Customer email send failed:", err)
   }
 
-  try {
-    await transport.sendMail({
-      to: businessInbox,
-      from: `${fromName} <${fromEmail}>`,
-      replyTo: booking.contactEmail,
-      subject: internal.subject,
-      text: internal.text,
-      html: internal.html,
-      attachments,
-    })
-    businessSent = true
-  } catch (err) {
-    businessError = err?.message ?? "smtp_error"
-    console.error("[bookings] Business email send failed:", err)
+  if (customerIsBusiness) {
+    businessSent = customerSent
+  } else if (!useBccStaffCopyOnCustomer) {
+    try {
+      await transport.sendMail({
+        to: businessInbox,
+        from: `${internalFromName} <${internalFromEmail}>`,
+        replyTo: booking.contactEmail,
+        subject: internal.subject,
+        text: internal.text,
+        html: internal.html,
+        attachments,
+      })
+      businessSent = true
+    } catch (err) {
+      businessError = err?.message ?? "smtp_error"
+      console.error("[bookings] Business email send failed:", err)
+    }
   }
 
   return {
+    /** Customer confirmation reached the booker’s inbox. */
     sent: customerSent,
+    /** Staff “new booking” copy (or BCC) reached the business inbox. */
+    businessNotified: businessSent,
     reason:
       customerSent && businessSent
         ? undefined

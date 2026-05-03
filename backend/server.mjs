@@ -194,6 +194,17 @@ async function verifyRecaptchaToken(token, remoteIp) {
   return { ok: true, skipped: false }
 }
 
+function bookingPhoneDigits(phone) {
+  return String(phone ?? "").replace(/\D/g, "")
+}
+
+function validateBookingPhoneServer(phone) {
+  const d = bookingPhoneDigits(phone)
+  if (d.length < 7 || d.length > 15) return false
+  if (/^(\d)\1{6,}$/.test(d)) return false
+  return true
+}
+
 function validateBooking(booking) {
   const requiredFields = [
     "id",
@@ -207,7 +218,13 @@ function validateBooking(booking) {
     "contactPhone",
     "contactEmail",
   ]
-  return requiredFields.every((field) => String(booking[field] ?? "").trim().length > 0)
+  if (!requiredFields.every((field) => String(booking[field] ?? "").trim().length > 0)) {
+    return { ok: false, error: "invalid_payload" }
+  }
+  if (!validateBookingPhoneServer(booking.contactPhone)) {
+    return { ok: false, error: "invalid_phone" }
+  }
+  return { ok: true }
 }
 
 ensureCsvFile()
@@ -269,8 +286,13 @@ createServer((req, res) => {
           return
         }
 
-        if (!validateBooking(booking)) {
-          sendJson(res, 400, { error: "Invalid booking payload." })
+        const bookingValidation = validateBooking(booking)
+        if (!bookingValidation.ok) {
+          if (bookingValidation.error === "invalid_phone") {
+            sendJson(res, 400, { error: "Invalid phone number.", code: "invalid_phone" })
+          } else {
+            sendJson(res, 400, { error: "Invalid booking payload." })
+          }
           return
         }
         const bookings = readBookings()
@@ -289,6 +311,9 @@ createServer((req, res) => {
         sendJson(res, 201, {
           ok: true,
           emailSent: mailResult.sent === true,
+          ...(typeof mailResult.businessNotified === "boolean"
+            ? { businessNotified: mailResult.businessNotified }
+            : {}),
           ...(mailResult.reason ? { emailError: mailResult.reason } : {}),
         })
       } catch (err) {
