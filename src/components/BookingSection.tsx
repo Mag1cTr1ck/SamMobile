@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import {
   ADDON_SERVICE_KEYS,
   addonBookingOptions,
@@ -14,7 +14,12 @@ import { formatKyd, getPriceBreakdown, getUnitPricesForVehicle } from "../lib/pr
 import { validateBookingPhone } from "../lib/phoneValidation"
 import { BOOKING_SAVE_ERROR } from "../lib/bookingErrors"
 import { getBookings, isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
-import { getRecaptchaToken, isRecaptchaConfigured, loadRecaptchaScript } from "../lib/recaptcha"
+import {
+  getRecaptchaResponse,
+  isRecaptchaConfigured,
+  renderRecaptchaCheckbox,
+  resetRecaptchaWidget,
+} from "../lib/recaptcha"
 import {
   formatDisplayDate,
   getBookableDates,
@@ -74,6 +79,14 @@ export function BookingSection() {
   /** Bumps on an interval so “today’s” slot list refreshes as real time passes (memo was freezing it). */
   const [slotClockTick, setSlotClockTick] = useState(0)
 
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null)
+  const recaptchaWidgetIdRef = useRef<number | null>(null)
+
+  function resetBookingRecaptcha() {
+    const id = recaptchaWidgetIdRef.current
+    if (id !== null) resetRecaptchaWidget(id)
+  }
+
   const dateKey = useMemo(() => toDateKey(selectedDate), [selectedDate])
   const dateStrip = useMemo(() => {
     void slotClockTick
@@ -126,9 +139,25 @@ export function BookingSection() {
 
   useEffect(() => {
     if (!isRecaptchaConfigured()) return
-    loadRecaptchaScript().catch(() => {
-      /* non-fatal until submit */
-    })
+    const host = recaptchaContainerRef.current
+    if (!host) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const id = await renderRecaptchaCheckbox(host)
+        if (!cancelled) recaptchaWidgetIdRef.current = id
+      } catch {
+        /* submit path shows an error if the widget never appears */
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (recaptchaWidgetIdRef.current !== null) {
+        resetRecaptchaWidget(recaptchaWidgetIdRef.current)
+        recaptchaWidgetIdRef.current = null
+      }
+      host.innerHTML = ""
+    }
   }, [])
 
   async function handleBook(e: FormEvent) {
@@ -216,18 +245,26 @@ export function BookingSection() {
 
     let recaptchaToken: string | null = null
     if (isRecaptchaConfigured()) {
-      try {
-        recaptchaToken = await getRecaptchaToken()
-      } catch (err) {
+      const wid = recaptchaWidgetIdRef.current
+      if (wid === null) {
         if (recaptchaSoftFail) {
-          console.warn("[booking] reCAPTCHA failed — submitting without token:", err)
+          console.warn("[booking] reCAPTCHA widget missing — submitting without token")
           recaptchaToken = null
         } else {
           setSubmitMessage(
-            "The security check could not run. Try again in a moment, use another network, or turn off strict ad blockers. In Google reCAPTCHA admin, add this site’s hostname (e.g. samsmobile.ky and www). If it still fails, contact us on WhatsApp.",
+            "The security check could not load. Try again in a moment, use another network, or turn off strict ad blockers. In Google reCAPTCHA admin, add this site’s hostname (e.g. samsmobile.ky and www). If it still fails, contact us on WhatsApp.",
           )
           return
         }
+      } else {
+        const token = getRecaptchaResponse(wid)
+        if (!token) {
+          setSubmitMessage(
+            "Please complete the \"I am not a robot\" checkbox above before confirming your booking.",
+          )
+          return
+        }
+        recaptchaToken = token
       }
     }
 
@@ -239,6 +276,7 @@ export function BookingSection() {
       emailSent = saveResult.emailSent
       emailError = saveResult.emailError
     } catch (error) {
+      resetBookingRecaptcha()
       if (error instanceof Error && error.message === "SLOT_TAKEN") {
         setSubmitMessage(
           "That slot was just taken by someone else. Please pick another time or operator.",
@@ -277,12 +315,14 @@ export function BookingSection() {
     }
 
     if (emailError === BOOKING_SAVE_ERROR.RECAPTCHA_FAILED) {
+      resetBookingRecaptcha()
       setSubmitMessage(
-        "We could not verify the booking request. Please refresh the page and try again, or contact us by WhatsApp or phone.",
+        "We could not verify the booking request. Complete the checkbox again, refresh the page if needed, or contact us by WhatsApp or phone.",
       )
       return
     }
 
+    resetBookingRecaptcha()
     setBookings((prev) => [...prev, record])
     let emailNote = emailSent
       ? " We have also sent a confirmation email."
@@ -638,6 +678,14 @@ export function BookingSection() {
               />
             </label>
           </div>
+
+          {isRecaptchaConfigured() && (
+            <div
+              className="booking-recaptcha-host"
+              ref={recaptchaContainerRef}
+              aria-label="Security verification"
+            />
+          )}
 
           <div className="booking-actions">
             {isRecaptchaConfigured() && (

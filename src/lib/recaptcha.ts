@@ -1,10 +1,13 @@
 const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY?.trim() ?? ""
 
+/** v2 Checkbox with explicit render (matches Google admin “reCAPTCHA type: v2 Checkbox”). */
 declare global {
   interface Window {
     grecaptcha?: {
       ready: (cb: () => void) => void
-      execute: (siteKey: string, opts: { action: string }) => Promise<string>
+      render: (container: HTMLElement, parameters: { sitekey: string; theme?: "light" | "dark" }) => number
+      getResponse: (widgetId?: number) => string
+      reset: (widgetId?: number) => void
     }
   }
 }
@@ -15,7 +18,7 @@ export function isRecaptchaConfigured(): boolean {
 
 function isGrecaptchaReady(): boolean {
   const g = window.grecaptcha
-  return Boolean(g && typeof g.ready === "function" && typeof g.execute === "function")
+  return Boolean(g && typeof g.ready === "function" && typeof g.render === "function")
 }
 
 async function waitForGrecaptcha(maxMs = 15_000): Promise<void> {
@@ -44,6 +47,7 @@ function injectScript(src: string): Promise<void> {
 
 let scriptLoadPromise: Promise<void> | null = null
 
+/** Loads reCAPTCHA v2 API (`render=explicit` — widget is created via {@link renderRecaptchaCheckbox}). */
 export function loadRecaptchaScript(): Promise<void> {
   if (!SITE_KEY) return Promise.resolve()
   if (typeof window === "undefined") return Promise.resolve()
@@ -62,7 +66,7 @@ export function loadRecaptchaScript(): Promise<void> {
         waitForGrecaptcha().then(resolve).catch(fail)
         return
       }
-      const url = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(SITE_KEY)}`
+      const url = "https://www.google.com/recaptcha/api.js?render=explicit"
       injectScript(url)
         .then(() => waitForGrecaptcha().then(resolve).catch(fail))
         .catch(fail)
@@ -74,26 +78,14 @@ export function loadRecaptchaScript(): Promise<void> {
 async function loadRecaptchaNetFallback(): Promise<void> {
   document.querySelectorAll('script[src*="recaptcha/api.js"]').forEach((el) => el.remove())
   scriptLoadPromise = null
-  const url = `https://www.recaptcha.net/recaptcha/api.js?render=${encodeURIComponent(SITE_KEY)}`
+  const url = "https://www.recaptcha.net/recaptcha/api.js?render=explicit"
   await injectScript(url)
   await waitForGrecaptcha()
 }
 
-function executeOnce(): Promise<string> {
-  const g = window.grecaptcha
-  if (!g?.ready || !g.execute) {
-    return Promise.reject(new Error("recaptcha_not_ready"))
-  }
-  return new Promise((resolve, reject) => {
-    g.ready(() => {
-      g.execute(SITE_KEY, { action: "booking" }).then(resolve).catch(reject)
-    })
-  })
-}
-
-/** v3 token for action `booking`; `null` when no site key (dev / not configured). */
-export async function getRecaptchaToken(): Promise<string | null> {
-  if (!SITE_KEY) return null
+/** Renders the checkbox into `container` (empty element). Resolves with widget id for {@link getRecaptchaResponse} / {@link resetRecaptchaWidget}. */
+export async function renderRecaptchaCheckbox(container: HTMLElement): Promise<number> {
+  if (!SITE_KEY) throw new Error("recaptcha_not_configured")
   try {
     await loadRecaptchaScript()
   } catch {
@@ -106,17 +98,28 @@ export async function getRecaptchaToken(): Promise<string | null> {
   if (!isGrecaptchaReady()) {
     throw new Error("recaptcha_not_ready")
   }
+  const g = window.grecaptcha!
+  return new Promise((resolve, reject) => {
+    g.ready(() => {
+      try {
+        const id = g.render(container, { sitekey: SITE_KEY, theme: "light" })
+        if (typeof id === "number") resolve(id)
+        else reject(new Error("recaptcha_render_failed"))
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error("recaptcha_render_failed"))
+      }
+    })
+  })
+}
 
-  const delays = [0, 400, 900]
-  let lastErr: unknown
-  for (const ms of delays) {
-    if (ms > 0) await new Promise((r) => setTimeout(r, ms))
-    try {
-      const token = await executeOnce()
-      if (typeof token === "string" && token.length > 20) return token
-    } catch (e) {
-      lastErr = e
-    }
+export function getRecaptchaResponse(widgetId: number): string {
+  return window.grecaptcha?.getResponse(widgetId)?.trim() ?? ""
+}
+
+export function resetRecaptchaWidget(widgetId: number): void {
+  try {
+    window.grecaptcha?.reset(widgetId)
+  } catch {
+    /* ignore */
   }
-  throw lastErr instanceof Error ? lastErr : new Error("recaptcha_execute_failed")
 }
