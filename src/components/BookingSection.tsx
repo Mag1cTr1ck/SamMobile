@@ -211,17 +211,20 @@ export function BookingSection() {
       contactEmail,
     }
 
+    const recaptchaSoftFail =
+      import.meta.env.DEV || import.meta.env.VITE_RECAPTCHA_SOFT_FAIL === "true"
+
     let recaptchaToken: string | null = null
     if (isRecaptchaConfigured()) {
       try {
         recaptchaToken = await getRecaptchaToken()
       } catch (err) {
-        if (import.meta.env.DEV) {
-          console.warn("[booking] reCAPTCHA failed in dev — submitting without token:", err)
+        if (recaptchaSoftFail) {
+          console.warn("[booking] reCAPTCHA failed — submitting without token:", err)
           recaptchaToken = null
         } else {
           setSubmitMessage(
-            "The security check could not run. Please refresh the page, wait a moment, and try again.",
+            "The security check could not run. Try again in a moment, use another network, or turn off strict ad blockers. In Google reCAPTCHA admin, add this site’s hostname (e.g. samsmobile.ky and www). If it still fails, contact us on WhatsApp.",
           )
           return
         }
