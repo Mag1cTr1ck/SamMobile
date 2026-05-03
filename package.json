@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node backend/server.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "firebase:login": "npx firebase-tools login",
-    "deploy:review": "npm run build && npx firebase-tools hosting:channel:deploy customer-review --expires 7d",
     "deploy:prod": "npm run build && npx firebase-tools deploy --only hosting"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
+    "nodemailer": "^8.0.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

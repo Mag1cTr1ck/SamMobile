@@ -1,0 +1,14 @@
+id,createdAt,operatorId,dateKey,slotId,services,vehicleSize,estimatedTotal,pricingNote,serviceAddress,serviceNotes,contactName,contactPhone,contactEmail
+694354a6-2070-49d8-9f7c-9976602978e6,2026-04-25T23:03:52.560Z,kevin,2026-04-26,s2,wash_vacuum|addon_light_stain,large,55,,Test,,test email,45698764,catchdesifyoucan@gmail.com
+3bf5f32f-62ee-44df-ae32-0bcac9852766,2026-04-26T14:14:22.635Z,kevin,2026-04-26,s3,interior|wax,medium,43,,trsdt,,teset,3459255102,catchdesifyoucan@gmail.com
+92fcefc3-34bc-488b-9d02-11fb04f5aaf0,2026-04-26T15:56:35.101Z,kevin,2026-04-26,s4,exterior,medium,28,,teste,,test,345 925 5102,catchdesifyoucan@gmail.com
+4b3a5042-d159-4690-94bb-25b2c9b64fae,2026-04-26T15:58:10.495Z,markland,2026-04-26,s3,interior|exterior|wax,medium,71,,test,,test,3459255102,catchdesifyoucan@gmail.com
+e676dbc7-d8b9-46ce-b15f-1e7ef28a7e7f,2026-04-26T18:22:47.745Z,markland,2026-04-27,s3,interior|exterior|addon_mold_biohazard,small,61,,test address,,test name,345 925 5102,catchdesifyoucan@gmail.com
+fb16d916-4b8a-40d1-90eb-8da28f488f2f,2026-04-26T18:27:19.346Z,markland,2026-04-27,s2,interior|exterior|wax,medium,71,,rerwerwe,,werwer,346 925 5102,catchdesifyoucan@gmail.com
+100a3220-a22e-465e-8420-42a7a5f59d8d,2026-04-26T18:48:17.050Z,markland,2026-04-27,s4,wash_vacuum|wax,large,65,,test,,test,345 9255102,catchdesifyoucan@gmail.com
+f73436fb-3786-4108-9eb3-630ef172da4d,2026-04-26T18:53:37.701Z,markland,2026-04-27,s8,interior|exterior|wax,small,56,,test,,test,345 9255102,catchdesifyoucan@gmail.com
+64f4d1e5-eeb2-4103-aaf1-d2ec919963c1,2026-04-26T19:11:57.954Z,markland,2026-04-27,s6,full_detail,medium,,Full detailing ranges between $100.00 and $350.00 depending on the condition of the vehicle. We'll confirm the price after we assess your vehicle.,test,,tester,345-9255102,catchdesifyoucan@gmail.com
+d7c8b63b-a350-45a0-902f-f7bdfd64ce86,2026-04-26T19:14:42.210Z,markland,2026-04-28,s2,interior|addon_light_bug_tar,small,33,,teswet,,setset,setset,catchdesifyoucan@gmail.com
+c919442f-cece-4d5f-af5d-eef5743f4671,2026-04-26T19:22:46.803Z,kevin,2026-04-28,s1,interior|addon_engine_bay,medium,43,,test,,test,345 9255102,catchdesifyoucan@gmail.com
+bc394d3a-381e-40ef-803e-7f2a62605be5,2026-04-26T19:34:19.602Z,markland,2026-04-28,s4,exterior,medium,28,,dfsdfsdf,,dfg,dfg,catchdesifyoucan@gmail.com
+0035c745-b9f2-4851-836b-f67af39328dd,2026-04-26T19:37:36.340Z,markland,2026-04-28,s8,interior,medium,28,,sdfsdf,,sdfsdf,sdfsdf,catchesifyoucan@gmail.com

@@ -21,7 +21,7 @@ export function ServicesSection() {
         <article className="card">
           <h3>{dealDetails.interior.title}</h3>
           <p className="muted small">Focused on the cabin.</p>
-          <h4 className="list-title">Typically includes</h4>
+          <h4 className="list-title">Includes</h4>
           <ul className="checklist">
             {dealDetails.interior.included.map((t) => (
               <li key={t}>{t}</li>
@@ -32,7 +32,7 @@ export function ServicesSection() {
         <article className="card">
           <h3>{dealDetails.exterior.title}</h3>
           <p className="muted small">Focused on the outside.</p>
-          <h4 className="list-title">Typically includes</h4>
+          <h4 className="list-title">Includes</h4>
           <ul className="checklist">
             {dealDetails.exterior.included.map((t) => (
               <li key={t}>{t}</li>
@@ -59,7 +59,7 @@ export function ServicesSection() {
 
         <article className="card">
           <h3>{dealDetails.fullDetail.title}</h3>
-          <p className="muted small">Top-to-bottom refresh—priced after vehicle review.</p>
+          <p className="muted small">Top-to-bottom, inside and out.  Priced after vehicle review.</p>
           <h4 className="list-title">Exterior full detailing</h4>
           <ul className="checklist">
             {dealDetails.fullDetail.exterior.map((t) => (
@@ -77,7 +77,7 @@ export function ServicesSection() {
         <article className="card services-addons-card">
           <h3>Optional add-ons</h3>
           <p className="muted small">
-            Book these with a main package — final price depends on vehicle size (small / medium / large).
+            Book these additional services with a main package. Final price depends on your vehicle size.
             Small-vehicle starting prices:
           </p>
           <ul className="addon-services-list">

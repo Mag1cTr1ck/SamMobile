@@ -29,10 +29,6 @@ export function ContactSection() {
               WhatsApp {company.cell}
             </a>
           </div>
-          <p className="muted tiny">
-            Google Maps below shows our <em>office</em> only. For the wash, use WhatsApp or the address
-            fields when you book online.
-          </p>
         </div>
         <div className="card contact-card">
           <h3>Office &amp; mailing address</h3>
@@ -45,26 +41,17 @@ export function ContactSection() {
             <br />
             {company.poBox}
           </address>
-          <a
-            className="btn ghost map-link"
-            href={company.officeMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open office in Google Maps
-          </a>
         </div>
         <div className="card contact-card">
-          <h3>Phone &amp; email</h3>
+          <h3>Phone, email &amp; website</h3>
           <p>
-            Land line:{" "}
-            <a href={`tel:+1345${company.landLine.replace(/-/g, "")}`}>{company.landLine}</a>
-            <br />
-            Cell:{" "}
             <a href={`tel:+1345${company.cell.replace(/-/g, "")}`}>{company.cell}</a>
           </p>
           <p>
             <a href={`mailto:${company.email}`}>{company.email}</a>
+          </p>
+          <p>
+            <a href={company.websiteUrl}>samsmobile.ky</a>
           </p>
         </div>
       </div>

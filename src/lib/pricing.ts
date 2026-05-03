@@ -191,5 +191,5 @@ export function getUnitPricesForVehicle(vehicleSize: VehicleSize): UnitPrices {
 }
 
 export function formatKyd(amount: number): string {
-  return `$${amount.toFixed(2)} KYD`
+  return `$${amount.toFixed(2)} `
 }

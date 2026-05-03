@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import {
   ADDON_SERVICE_KEYS,
   addonBookingOptions,
@@ -11,10 +11,11 @@ import {
   type VehicleSize,
 } from "../data/siteContent"
 import { formatKyd, getPriceBreakdown, getUnitPricesForVehicle } from "../lib/pricing"
-import { isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
+import { getBookings, isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
 import {
   formatDisplayDate,
   getBookableDates,
+  isSlotInPast,
   TIME_SLOTS,
   toDateKey,
   type SlotId,
@@ -64,10 +65,20 @@ export function BookingSection() {
   const [serviceAddress, setServiceAddress] = useState("")
 
   const [submitMessage, setSubmitMessage] = useState<string | null>(null)
-  const [, setBookingRefresh] = useState(0)
+  const [bookings, setBookings] = useState<BookingRecord[]>([])
+  const [bookingRefresh, setBookingRefresh] = useState(0)
+  /** Bumps on an interval so “today’s” slot list refreshes as real time passes (memo was freezing it). */
+  const [slotClockTick, setSlotClockTick] = useState(0)
 
   const dateKey = useMemo(() => toDateKey(selectedDate), [selectedDate])
-  const dateStrip = useMemo(() => getBookableDates(new Date(), 28), [])
+  const dateStrip = useMemo(() => {
+    void slotClockTick
+    return getBookableDates(new Date(), 28)
+  }, [slotClockTick])
+  const visibleSlots = useMemo(() => {
+    void slotClockTick
+    return TIME_SLOTS.filter((slot) => !isSlotInPast(selectedDate, slot.id))
+  }, [selectedDate, slotClockTick])
 
   const unitPrices = useMemo(() => getUnitPricesForVehicle(vehicleSize), [vehicleSize])
 
@@ -94,19 +105,44 @@ export function BookingSection() {
     [services, vehicleSize],
   )
 
-  const canSubmit =
-    selection &&
-    hasServiceSelection &&
-    (priceBreakdown.total !== null || selFullDetail) &&
-    serviceAddress.trim().length > 0 &&
-    guestName.trim() &&
-    guestPhone.trim() &&
-    guestEmail.trim()
+  useEffect(() => {
+    let cancelled = false
+    getBookings().then((rows) => {
+      if (!cancelled) setBookings(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [bookingRefresh])
 
-  function handleBook(e: FormEvent) {
+  useEffect(() => {
+    const id = window.setInterval(() => setSlotClockTick((n) => n + 1), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  async function handleBook(e: FormEvent) {
     e.preventDefault()
     setSubmitMessage(null)
-    if (!selection || !hasServiceSelection) return
+    if (!selection) {
+      setSubmitMessage("Please choose an operator and time slot before confirming.")
+      return
+    }
+
+    if (isSlotInPast(selectedDate, selection.slotId)) {
+      setSubmitMessage("That slot’s time window has ended. Please choose another slot.")
+      setSelection(null)
+      return
+    }
+
+    if (!hasServiceSelection) {
+      setSubmitMessage("Please select at least one main service package.")
+      return
+    }
+
+    if (!selFullDetail && priceBreakdown.total === null) {
+      setSubmitMessage("Please review your package and add-on selections to see a valid estimate.")
+      return
+    }
 
     const contactName = guestName.trim()
     const contactPhone = guestPhone.trim()
@@ -122,7 +158,7 @@ export function BookingSection() {
       return
     }
 
-    if (isSlotTaken(selection.operatorId, dateKey, selection.slotId)) {
+    if (isSlotTaken(bookings, selection.operatorId, dateKey, selection.slotId)) {
       setSubmitMessage("That slot was just taken—please pick another time.")
       setBookingRefresh((v) => v + 1)
       setSelection(null)
@@ -139,14 +175,36 @@ export function BookingSection() {
       vehicleSize,
       estimatedTotal: priceBreakdown.total,
       pricingNote: priceBreakdown.note,
+      lineItems:
+        priceBreakdown.lines.length > 0
+          ? priceBreakdown.lines.map((l) => ({ label: l.label, amount: l.amount }))
+          : undefined,
       serviceAddress: serviceAddress.trim(),
       contactName,
       contactPhone,
       contactEmail,
     }
-    saveBooking(record)
+    let emailSent = false
+    try {
+      const saveResult = await saveBooking(record)
+      emailSent = saveResult.emailSent
+    } catch (error) {
+      if (error instanceof Error && error.message === "SLOT_TAKEN") {
+        setSubmitMessage("That slot was just taken—please pick another time.")
+        setBookingRefresh((v) => v + 1)
+        setSelection(null)
+        return
+      }
+      setSubmitMessage("We could not save your booking right now. Please try again.")
+      return
+    }
+
+    setBookings((prev) => [...prev, record])
+    const emailNote = emailSent
+      ? " We have also sent a confirmation email."
+      : " If you do not receive the confirmation email check your spam folder."
     setSubmitMessage(
-      `Booking confirmed for ${formatDisplayDate(selectedDate)}, ${TIME_SLOTS.find((s) => s.id === selection.slotId)?.label}, at your service location. We will contact you at ${contactEmail}.`,
+      `Booking confirmed for ${formatDisplayDate(selectedDate)} at ${TIME_SLOTS.find((s) => s.id === selection.slotId)?.label}. We will contact you at ${contactEmail}.${emailNote}`,
     )
     setSelection(null)
     setSelInterior(false)
@@ -210,11 +268,10 @@ export function BookingSection() {
               <div key={op.id} className="operator-column">
                 <div className="operator-head">
                   <h4>{op.name}</h4>
-                  <span className="muted tiny">Mobile unit</span>
                 </div>
                 <ul className="slot-list">
-                  {TIME_SLOTS.map((slot) => {
-                    const taken = isSlotTaken(op.id, dateKey, slot.id)
+                  {visibleSlots.map((slot) => {
+                    const taken = isSlotTaken(bookings, op.id, dateKey, slot.id)
                     const isSelected =
                       selection?.operatorId === op.id && selection.slotId === slot.id
                     return (
@@ -247,7 +304,10 @@ export function BookingSection() {
               </div>
             ))}
           </div>
-
+          {visibleSlots.length === 0 ? (
+            <p className="muted small">No remaining slots for this date. Please choose another day.</p>
+          ) : null}
+<br />
           <h3 className="booking-step-title">Vehicle size</h3>
           <p className="muted small">Pricing is based on vehicle size</p>
           <div className="vehicle-row vehicle-row-first">
@@ -359,7 +419,7 @@ export function BookingSection() {
                   <span className="package-tile-title">Full detailing</span>
                   <span className="package-tile-hint">Deep clean — final price quoted on site</span>
                 </span>
-                <span className="package-tile-price package-tile-price-range">$100–$350 KYD</span>
+                <span className="package-tile-price package-tile-price-range">$100–$350</span>
               </label>
             </div>
           </fieldset>
@@ -438,7 +498,7 @@ export function BookingSection() {
               placeholder="Service address — e.g. 18 Fair Lawn Rd, George Town — or your workplace name and area"
             />
           </label>
-
+          <br />
           <h3 className="booking-step-title">Your contact</h3>
           <p className="muted small guest-contact-lead">
             We’ll confirm your visit and reach you if your time slot changes.
@@ -477,13 +537,13 @@ export function BookingSection() {
                 name="contact-email"
                 type="email"
                 autoComplete="email"
-                placeholder="name@example.com"
+                placeholder="sam@samsmobile.ky"
               />
             </label>
           </div>
 
           <div className="booking-actions">
-            <button type="submit" className="btn primary wide btn-stack" disabled={!canSubmit}>
+            <button type="submit" className="btn primary wide btn-stack">
               <span className="btn-stack-primary">Confirm booking</span>
               <span className="btn-stack-sub">We’ll follow up by email with your appointment details</span>
             </button>

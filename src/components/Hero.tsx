@@ -8,7 +8,9 @@ export function Hero() {
         <h1 id="hero-heading">For all your car cleaning needs.</h1>
         <p className="lede">
           Our mobile operators travel to <strong>your</strong> home, workplace, or business—we bring
-          the equipment and the shine to you. Book a time, share your location, and we handle the rest.
+          the equipment and the shine to you. We have been in business for <strong>20 years</strong>, so
+          you get an experienced team that knows how to work around your schedule. Book a time, share your
+          location, and we handle the rest.
         </p>
         <div className="hero-actions">
           <a className="btn primary" href="#booking">

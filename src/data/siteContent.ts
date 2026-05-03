@@ -6,14 +6,12 @@ export const company = {
   address: "64 Fair Lawn Road, GT",
   poBox: "PO Box 540 GT, KY1-1107",
   landLine: "949-4444",
-  cell: "927-7227",
-  email: "samsmonilecleaning@yahoo.com",
+  cell: "345 927-7227",
+  email: "sam@samsmobile.ky",
+  /** Public site (canonical + contact link). */
+  websiteUrl: "https://samsmobile.ky",
   /** Cayman Islands WhatsApp (same as cell). E.164 digits without + for wa.me links. */
   whatsAppDigits: "13459277227",
-  /** Google Maps search for the office / mailing address. */
-  officeMapsUrl:
-    "https://www.google.com/maps/search/?api=1&query=" +
-    encodeURIComponent("64 Fair Lawn Road, George Town, Grand Cayman"),
 } as const
 
 /** Pre-filled WhatsApp message — customer adds their service address or drops a location pin in chat. */
@@ -54,45 +52,33 @@ export const priceTable = {
       prefix: "+",
     },
     {
-      name: "Deep shampoo — seats & carpets (add-on)",
-      key: "addon_deep_shampoo" as const,
-      values: [25, 30, 35],
-      prefix: "+",
-    },
-    {
-      name: "Heavy stain / pet hair removal (add-on)",
-      key: "addon_heavy_stain_pet" as const,
-      values: [20, 25, 30],
-      prefix: "+",
-    },
-    {
-      name: "Mold / biohazard cleanup (add-on)",
-      key: "addon_mold_biohazard" as const,
-      values: [40, 50, 60],
-      prefix: "+",
-    },
-    {
       name: "Engine bay cleaning (add-on)",
       key: "addon_engine_bay" as const,
-      values: [20, 28, 35],
+      values: [10, 15, 20],
       prefix: "+",
     },
     {
-      name: "Paint correction / scratch reduction (add-on)",
-      key: "addon_paint_correction" as const,
-      values: [50, 65, 85],
+      name: "Light stain removal (add-on)",
+      key: "addon_light_stain" as const,
+      values: [10, 10, 10],
       prefix: "+",
     },
     {
-      name: "Heavy tar / asphalt / chemical staining (add-on)",
+      name: "Light bug and tar removal (add-on)",
+      key: "addon_light_bug_tar" as const,
+      values: [10, 10, 10],
+      prefix: "+",
+    },
+    {
+      name: "Heavy tar, asphalt, or chemical staining (add-on)",
       key: "addon_heavy_tar" as const,
-      values: [15, 20, 28],
+      values: [15, 15, 15],
       prefix: "+",
     },
     {
-      name: "Interior surfaces wipe-down — dash, doors, console (add-on)",
-      key: "addon_interior_wipe" as const,
-      values: [12, 15, 18],
+      name: "Mold, pet odor, or biohazard cleanup (add-on)",
+      key: "addon_mold_biohazard" as const,
+      values: [15, 15, 15],
       prefix: "+",
     },
   ],
@@ -103,13 +89,11 @@ export const priceTable = {
 /** Optional extras booked with a main package (not standalone). Order = line order in estimates. */
 export const ADDON_SERVICE_KEYS = [
   "wax",
-  "addon_deep_shampoo",
-  "addon_heavy_stain_pet",
-  "addon_mold_biohazard",
   "addon_engine_bay",
-  "addon_paint_correction",
+  "addon_light_stain",
+  "addon_light_bug_tar",
   "addon_heavy_tar",
-  "addon_interior_wipe",
+  "addon_mold_biohazard",
 ] as const
 
 export type AddonServiceKey = (typeof ADDON_SERVICE_KEYS)[number]
@@ -168,39 +152,29 @@ export const addonBookingOptions: {
     hint: "Extra protection and gloss on top of your selected wash package.",
   },
   {
-    key: "addon_deep_shampoo",
-    label: "Deep shampoo — seats & carpets",
-    hint: "Extracts grime from fabrics beyond a standard vacuum.",
-  },
-  {
-    key: "addon_heavy_stain_pet",
-    label: "Heavy stain / pet hair removal",
-    hint: "Extra time for shedding, embedded hair, or stubborn stains.",
-  },
-  {
-    key: "addon_mold_biohazard",
-    label: "Mold / biohazard cleanup",
-    hint: "Special handling — we’ll confirm scope before work begins.",
-  },
-  {
     key: "addon_engine_bay",
     label: "Engine bay cleaning",
     hint: "Degrease and dress — safe products for your engine compartment.",
   },
   {
-    key: "addon_paint_correction",
-    label: "Paint correction / scratch reduction",
-    hint: "Machine polishing to improve swirls and light defects (not full respray).",
+    key: "addon_light_stain",
+    label: "Light stain removal",
+    hint: "Spot treatment for minor interior stains.",
+  },
+  {
+    key: "addon_light_bug_tar",
+    label: "Light bug and tar removal",
+    hint: "Extra bug and tar treatment beyond standard wash coverage.",
   },
   {
     key: "addon_heavy_tar",
-    label: "Heavy tar / asphalt / chemical staining",
+    label: "Heavy tar, asphalt, or chemical staining",
     hint: "Extra decontamination when light bug/tar isn’t enough.",
   },
   {
-    key: "addon_interior_wipe",
-    label: "Interior surfaces wipe-down",
-    hint: "Dashboard, doors, console & cup holders — pairs well with wash & vacuum.",
+    key: "addon_mold_biohazard",
+    label: "Mold, pet odor, or biohazard cleanup",
+    hint: "Special handling — we’ll confirm scope before work begins.",
   },
 ]
 
@@ -209,34 +183,32 @@ export const dealDetails = {
     title: "Interior vehicle wash",
     included: [
       "Vacuuming of seats, carpets, floor mats, and trunk",
-      "Wipe down of interior surfaces (dashboard, center console, door panels, cup holders)",
+      "Wipe down of interior surfaces including dashboard, center console, door panels, cup holders",
       "Cleaning of interior windows and mirrors",
-      "Dust removal from vents and hard-to-reach areas",
-      "Light stain removal (where possible)",
-      "Interior deodorizing for a fresh scent",
+      "Dust removal from vents and hard to reach areas like the roof and trunk space",
+      "Interior deodorizing",
     ],
   },
   exterior: {
     title: "Exterior vehicle wash",
     included: [
       "Hand wash of vehicle exterior",
-      "Removal of dirt, dust, and road grime",
-      "Cleaning of wheels and tires",
-      "Tire shine (optional or included based on package)",
-      "Rinse and spot-free drying",
-      "Exterior window & mirror cleaning",
-      "Light bug and tar removal",
-      "Wipe down of door jambs",
+"Removal of dirt, dust, and road grime",
+"Cleaning of wheels and tires",
+"Tire shine",
+"Rinse and spot free drying",
+"Exterior window & mirror cleaning",
+"Wipe down of door jambs",
     ],
   },
   washVacuum: {
     title: "Wash & vacuum",
     exterior: [
-      "Hand wash of vehicle exterior",
-      "Removal of dirt, dust, and light road grime",
-      "Cleaning of exterior windows and mirrors",
-      "Rinse and dry",
-      "Tire shine",
+      "Vacuuming of seats, carpets, floor mats, and trunk",
+"Wipe down of interior surfaces including dashboard, center console, door panels, cup holders",
+"Cleaning of interior windows and mirrors",
+"Dust removal from vents and hard to reach areas",
+"Interior deodorizing for a fresh scent",
     ],
     interior: [
       "Vacuuming of seats and carpets",
@@ -254,11 +226,10 @@ export const dealDetails = {
       "Exterior window and mirror cleaning",
       "Door jamb cleaning",
       "Tire shine",
-      "Wax or paint sealant (if included in package)",
       "Hand drying for a clean, streak-free finish",
     ],
     interior: [
-      "Complete vacuuming (seats, carpets, mats, trunk)",
+      "Complete vacuuming of seats, carpets, mats, trunk",
       "Shampooing or deep cleaning of carpets and seats (cloth or leather safe products)",
       "Full wipe down and detailing of all interior surfaces",
       "Interior window and mirror cleaning",
