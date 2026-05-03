@@ -154,6 +154,17 @@ export async function saveBooking(
     if (res.status === 403) {
       return { emailSent: false, emailError: BOOKING_SAVE_ERROR.RECAPTCHA_FAILED }
     }
+    if (res.status === 400) {
+      try {
+        const errBody = (await res.json()) as { code?: string }
+        if (errBody.code === "invalid_phone") {
+          return { emailSent: false, emailError: BOOKING_SAVE_ERROR.INVALID_PHONE }
+        }
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`POST /api/bookings failed: ${res.status}`)
+    }
     if (!res.ok) {
       throw new Error(`POST /api/bookings failed: ${res.status}`)
     }
@@ -174,8 +185,9 @@ export async function saveBooking(
     if (error instanceof Error && error.message === "SLOT_TAKEN") {
       throw error
     }
-    if (isSlotTaken(getLocalBookings(), booking.operatorId, booking.dateKey, booking.slotId)) {
-      throw new Error("SLOT_TAKEN")
+    const locals = getLocalBookings()
+    if (isSlotTaken(locals, booking.operatorId, booking.dateKey, booking.slotId)) {
+      return { emailSent: false, emailError: BOOKING_SAVE_ERROR.OFFLINE_SLOT_TAKEN }
     }
     saveLocalBooking(booking)
     return { emailSent: false, emailError: BOOKING_SAVE_ERROR.OFFLINE_LOCAL }

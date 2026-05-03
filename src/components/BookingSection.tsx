@@ -11,6 +11,7 @@ import {
   type VehicleSize,
 } from "../data/siteContent"
 import { formatKyd, getPriceBreakdown, getUnitPricesForVehicle } from "../lib/pricing"
+import { validateBookingPhone } from "../lib/phoneValidation"
 import { BOOKING_SAVE_ERROR } from "../lib/bookingErrors"
 import { getBookings, isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
 import { getRecaptchaToken, isRecaptchaConfigured, loadRecaptchaScript } from "../lib/recaptcha"
@@ -69,6 +70,7 @@ export function BookingSection() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null)
   const [bookings, setBookings] = useState<BookingRecord[]>([])
   const [bookingRefresh, setBookingRefresh] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   /** Bumps on an interval so “today’s” slot list refreshes as real time passes (memo was freezing it). */
   const [slotClockTick, setSlotClockTick] = useState(0)
 
@@ -131,6 +133,7 @@ export function BookingSection() {
 
   async function handleBook(e: FormEvent) {
     e.preventDefault()
+    if (isSubmitting) return
     setSubmitMessage(null)
     if (!selection) {
       setSubmitMessage("Please choose an operator and time slot before confirming.")
@@ -167,8 +170,22 @@ export function BookingSection() {
       return
     }
 
-    if (isSlotTaken(bookings, selection.operatorId, dateKey, selection.slotId)) {
-      setSubmitMessage("That slot was just taken—please pick another time.")
+    const phoneCheck = validateBookingPhone(contactPhone)
+    if (!phoneCheck.ok) {
+      setSubmitMessage(phoneCheck.message)
+      return
+    }
+
+    let freshBookings = bookings
+    try {
+      freshBookings = await getBookings()
+      setBookings(freshBookings)
+    } catch {
+      /* keep in-memory list if refresh fails */
+    }
+
+    if (isSlotTaken(freshBookings, selection.operatorId, dateKey, selection.slotId)) {
+      setSubmitMessage("That slot is already booked. Please pick another time or operator.")
       setBookingRefresh((v) => v + 1)
       setSelection(null)
       return
@@ -211,6 +228,7 @@ export function BookingSection() {
       }
     }
 
+    setIsSubmitting(true)
     let emailSent = false
     let emailError: string | undefined
     try {
@@ -219,18 +237,38 @@ export function BookingSection() {
       emailError = saveResult.emailError
     } catch (error) {
       if (error instanceof Error && error.message === "SLOT_TAKEN") {
-        setSubmitMessage("That slot was just taken—please pick another time.")
+        setSubmitMessage(
+          "That slot was just taken by someone else. Please pick another time or operator.",
+        )
         setBookingRefresh((v) => v + 1)
         setSelection(null)
         return
       }
       setSubmitMessage("We could not save your booking right now. Please try again.")
       return
+    } finally {
+      setIsSubmitting(false)
+    }
+
+    if (emailError === BOOKING_SAVE_ERROR.OFFLINE_SLOT_TAKEN) {
+      setSubmitMessage(
+        "This time is already saved on this device. Pick another slot or clear your browser data for this site if it’s wrong.",
+      )
+      setBookingRefresh((v) => v + 1)
+      setSelection(null)
+      return
     }
 
     if (emailError === BOOKING_SAVE_ERROR.MISSING_API_URL) {
       setSubmitMessage(
         "Online booking is not connected to the server yet. Please WhatsApp or call us to book, or try again later.",
+      )
+      return
+    }
+
+    if (emailError === BOOKING_SAVE_ERROR.INVALID_PHONE) {
+      setSubmitMessage(
+        "Please enter a valid mobile number (7–15 digits). You can use spaces or dashes.",
       )
       return
     }
@@ -297,6 +335,7 @@ export function BookingSection() {
                   aria-selected={active}
                   className={`date-pill ${active ? "active" : ""}`}
                   onClick={() => {
+                    setSubmitMessage(null)
                     setSelectedDate(d)
                     setSelection(null)
                   }}
@@ -330,7 +369,10 @@ export function BookingSection() {
                           type="button"
                           disabled={taken}
                           className={`slot-btn ${isSelected ? "selected" : ""}`}
-                          onClick={() => setSelection({ operatorId: op.id, slotId: slot.id })}
+                          onClick={() => {
+                            setSubmitMessage(null)
+                            setSelection({ operatorId: op.id, slotId: slot.id })
+                          }}
                         >
                           <span>{slot.label}</span>
                           <span className={`slot-status ${taken ? "is-booked" : "is-available"}`}>
@@ -576,7 +618,9 @@ export function BookingSection() {
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="e.g. 345-123-4567"
+                title="7–15 digits; spaces and dashes are fine"
               />
+              <span className="muted small guest-field-hint">7–15 digits (Cayman or international).</span>
             </label>
             <label className="guest-field">
               <span className="guest-field-label">Email</span>
@@ -606,8 +650,15 @@ export function BookingSection() {
                 apply.
               </p>
             )}
-            <button type="submit" className="btn primary wide btn-stack">
-              <span className="btn-stack-primary">Confirm booking</span>
+            <button
+              type="submit"
+              className="btn primary wide btn-stack"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              <span className="btn-stack-primary">
+                {isSubmitting ? "Saving…" : "Confirm booking"}
+              </span>
               <span className="btn-stack-sub">We’ll follow up by email with your appointment details</span>
             </button>
             {submitMessage && <p className="form-success">{submitMessage}</p>}
