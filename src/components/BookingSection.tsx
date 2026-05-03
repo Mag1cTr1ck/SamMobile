@@ -198,11 +198,16 @@ export function BookingSection() {
     if (isRecaptchaConfigured()) {
       try {
         recaptchaToken = await getRecaptchaToken()
-      } catch {
-        setSubmitMessage(
-          "The security check could not run. Please refresh the page, wait a moment, and try again.",
-        )
-        return
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn("[booking] reCAPTCHA failed in dev — submitting without token:", err)
+          recaptchaToken = null
+        } else {
+          setSubmitMessage(
+            "The security check could not run. Please refresh the page, wait a moment, and try again.",
+          )
+          return
+        }
       }
     }
 

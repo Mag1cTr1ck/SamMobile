@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# Optional runtime booking API URL for production (copy from bookings-api.example.json)
+public/bookings-api.json
+
 # Firebase CLI local cache
 .firebase/
 

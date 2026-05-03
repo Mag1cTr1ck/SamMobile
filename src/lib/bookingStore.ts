@@ -5,13 +5,47 @@ import type { SlotId } from "./schedule"
 const BOOKINGS_KEY = "samc_bookings_v1"
 
 const LOCAL_DEV_API = "http://localhost:8787"
-/** From repo root `.env` at `vite build` time only (`VITE_BOOKINGS_API_BASE=...`). */
-const configuredApiBase = import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "").trim()
-/** Resolved API base URL (public URL in prod builds when `.env` is set). */
-export const BOOKINGS_API_BASE =
-  configuredApiBase && configuredApiBase.length > 0 ? configuredApiBase : LOCAL_DEV_API
 
-const hasPublicApiUrl = Boolean(configuredApiBase && configuredApiBase.length > 0)
+const viteApiBase = import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "").trim() ?? ""
+
+let resolvedApiBasePromise: Promise<string> | null = null
+
+function normalizeApiBase(url: string): string {
+  return url.replace(/\/$/, "").trim()
+}
+
+/**
+ * Resolves the booking API origin in order:
+ * 1. `VITE_BOOKINGS_API_BASE` (baked in at `vite build`)
+ * 2. Production only: `GET /bookings-api.json` body `{ "baseUrl": "https://..." }` (same origin, no rebuild)
+ * 3. `http://localhost:8787` for local dev
+ */
+export function getBookingsApiBase(): Promise<string> {
+  if (!resolvedApiBasePromise) {
+    resolvedApiBasePromise = (async () => {
+      if (viteApiBase.length > 0) {
+        return viteApiBase
+      }
+      if (import.meta.env.PROD) {
+        try {
+          const res = await fetch("/bookings-api.json", { cache: "no-store" })
+          if (res.ok) {
+            const data = (await res.json()) as { baseUrl?: string }
+            const fromJson =
+              typeof data.baseUrl === "string" ? normalizeApiBase(data.baseUrl) : ""
+            if (fromJson.length > 0) {
+              return fromJson
+            }
+          }
+        } catch {
+          /* fall through to local default */
+        }
+      }
+      return LOCAL_DEV_API
+    })()
+  }
+  return resolvedApiBasePromise
+}
 
 export type BookingRecord = {
   id: string
@@ -79,11 +113,12 @@ export function isSlotTaken(
 }
 
 export async function getBookings(): Promise<BookingRecord[]> {
-  if (import.meta.env.PROD && !hasPublicApiUrl) {
+  const base = await getBookingsApiBase()
+  if (import.meta.env.PROD && base === LOCAL_DEV_API) {
     return getLocalBookings()
   }
   try {
-    const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`)
+    const res = await fetch(`${base}/api/bookings`)
     if (!res.ok) throw new Error(`GET /api/bookings failed: ${res.status}`)
     const data = (await res.json()) as BookingRecord[]
     writeJson(BOOKINGS_KEY, data)
@@ -97,7 +132,8 @@ export async function saveBooking(
   booking: BookingRecord,
   options?: { recaptchaToken: string | null },
 ): Promise<SaveBookingResult> {
-  if (import.meta.env.PROD && !hasPublicApiUrl) {
+  const base = await getBookingsApiBase()
+  if (import.meta.env.PROD && base === LOCAL_DEV_API) {
     return { emailSent: false, emailError: BOOKING_SAVE_ERROR.MISSING_API_URL }
   }
   const token = options?.recaptchaToken
@@ -107,7 +143,7 @@ export async function saveBooking(
       : { ...booking }
 
   try {
-    const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`, {
+    const res = await fetch(`${base}/api/bookings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
