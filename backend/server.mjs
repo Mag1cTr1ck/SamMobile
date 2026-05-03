@@ -220,8 +220,8 @@ createServer((req, res) => {
   }
 
   sendJson(res, 404, { error: "Not found" })
-}).listen(port, () => {
-  console.log(`Bookings API running on http://localhost:${port}`)
+}).listen(port, "0.0.0.0", () => {
+  console.log(`Bookings API listening on port ${port} (bind 0.0.0.0)`)
   console.log(`CSV file: ${csvPath}`)
   if (
     process.env.MAILERSEND_SMTP_USER?.trim() &&

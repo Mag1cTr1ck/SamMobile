@@ -185,9 +185,11 @@ export function BookingSection() {
       contactEmail,
     }
     let emailSent = false
+    let emailError: string | undefined
     try {
       const saveResult = await saveBooking(record)
       emailSent = saveResult.emailSent
+      emailError = saveResult.emailError
     } catch (error) {
       if (error instanceof Error && error.message === "SLOT_TAKEN") {
         setSubmitMessage("That slot was just taken—please pick another time.")
@@ -199,10 +201,24 @@ export function BookingSection() {
       return
     }
 
+    if (emailError === "missing_bookings_api_url") {
+      setSubmitMessage(
+        "Online booking is not connected to the server yet. Please WhatsApp or call us to book, or try again later.",
+      )
+      return
+    }
+
     setBookings((prev) => [...prev, record])
-    const emailNote = emailSent
+    let emailNote = emailSent
       ? " We have also sent a confirmation email."
       : " If you do not receive the confirmation email check your spam folder."
+    if (!emailSent && emailError === "offline_local_storage") {
+      emailNote =
+        " We could not reach the booking server—your visit is saved only on this device. Please message us on WhatsApp or call to confirm."
+    } else if (!emailSent && emailError && emailError !== "offline_local_storage") {
+      emailNote =
+        " Your booking was saved, but we could not send email from the server. We will still follow up—check spam or contact us if you hear nothing."
+    }
     setSubmitMessage(
       `Booking confirmed for ${formatDisplayDate(selectedDate)} at ${TIME_SLOTS.find((s) => s.id === selection.slotId)?.label}. We will contact you at ${contactEmail}.${emailNote}`,
     )

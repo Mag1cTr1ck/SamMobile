@@ -2,8 +2,14 @@ import type { OperatorId, ServiceKey, VehicleSize } from "../data/siteContent"
 import type { SlotId } from "./schedule"
 
 const BOOKINGS_KEY = "samc_bookings_v1"
-const BOOKINGS_API_BASE =
-  import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "") ?? "http://localhost:8787"
+
+const LOCAL_DEV_API = "http://localhost:8787"
+const configuredApiBase = import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "").trim()
+/** Public booking API (set `VITE_BOOKINGS_API_BASE` before production build). */
+export const BOOKINGS_API_BASE =
+  configuredApiBase && configuredApiBase.length > 0 ? configuredApiBase : LOCAL_DEV_API
+
+const hasPublicApiUrl = Boolean(configuredApiBase && configuredApiBase.length > 0)
 
 export type BookingRecord = {
   id: string
@@ -70,6 +76,9 @@ export function isSlotTaken(
 }
 
 export async function getBookings(): Promise<BookingRecord[]> {
+  if (import.meta.env.PROD && !hasPublicApiUrl) {
+    return getLocalBookings()
+  }
   try {
     const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`)
     if (!res.ok) throw new Error(`GET /api/bookings failed: ${res.status}`)
@@ -82,6 +91,9 @@ export async function getBookings(): Promise<BookingRecord[]> {
 }
 
 export async function saveBooking(booking: BookingRecord): Promise<SaveBookingResult> {
+  if (import.meta.env.PROD && !hasPublicApiUrl) {
+    return { emailSent: false, emailError: "missing_bookings_api_url" }
+  }
   try {
     const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`, {
       method: "POST",
