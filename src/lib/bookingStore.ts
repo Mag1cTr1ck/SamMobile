@@ -8,19 +8,38 @@ const LOCAL_DEV_API = "http://localhost:8787"
 
 const viteApiBase = import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "").trim() ?? ""
 
+declare global {
+  interface Window {
+    /** Set in production `index.html` by Vite at build time from `public/bookings-api.json`. */
+    __SAMSMOBILE_BOOKINGS_BOOT__?: { baseUrl?: string; sameOriginApi?: boolean }
+  }
+}
+
 let resolvedApiBasePromise: Promise<string> | null = null
 
 function normalizeApiBase(url: string): string {
   return url.replace(/\/$/, "").trim()
 }
 
+function readBookingsBootFromWindow(): { baseUrl: string; sameOriginApi: boolean } {
+  if (typeof window === "undefined") {
+    return { baseUrl: "", sameOriginApi: false }
+  }
+  const raw = window.__SAMSMOBILE_BOOKINGS_BOOT__
+  if (!raw || typeof raw !== "object") {
+    return { baseUrl: "", sameOriginApi: false }
+  }
+  const baseUrl =
+    typeof raw.baseUrl === "string" ? normalizeApiBase(raw.baseUrl) : ""
+  return { baseUrl, sameOriginApi: raw.sameOriginApi === true }
+}
+
 /**
  * Resolves the booking API origin in order:
  * 1. `VITE_BOOKINGS_API_BASE` (baked in at `vite build`)
- * 2. Production only: `GET /bookings-api.json`:
- *    - `{ "sameOriginApi": true }` → `window.location.origin` (use with Firebase Hosting → Cloud Run rewrite for `/api/**`)
- *    - or `{ "baseUrl": "https://resolved-host.example" }` (subdomain must exist in DNS)
- * 3. `http://localhost:8787` for local dev
+ * 2. Production: `window.__SAMSMOBILE_BOOKINGS_BOOT__` from `index.html` (Vite injects from `public/bookings-api.json` at build)
+ * 3. Production fallback: `GET /bookings-api.json` (same keys as the public file)
+ * 4. `http://localhost:8787` for local dev
  */
 export function getBookingsApiBase(): Promise<string> {
   if (!resolvedApiBasePromise) {
@@ -29,6 +48,13 @@ export function getBookingsApiBase(): Promise<string> {
         return viteApiBase
       }
       if (import.meta.env.PROD) {
+        const boot = readBookingsBootFromWindow()
+        if (boot.sameOriginApi && typeof window !== "undefined" && window.location?.origin) {
+          return normalizeApiBase(window.location.origin)
+        }
+        if (boot.baseUrl.length > 0) {
+          return boot.baseUrl
+        }
         try {
           const res = await fetch("/bookings-api.json", { cache: "no-store" })
           if (res.ok) {
