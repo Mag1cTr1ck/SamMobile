@@ -17,7 +17,9 @@ function normalizeApiBase(url: string): string {
 /**
  * Resolves the booking API origin in order:
  * 1. `VITE_BOOKINGS_API_BASE` (baked in at `vite build`)
- * 2. Production only: `GET /bookings-api.json` body `{ "baseUrl": "https://..." }` (same origin, no rebuild)
+ * 2. Production only: `GET /bookings-api.json`:
+ *    - `{ "sameOriginApi": true }` → `window.location.origin` (use with Firebase Hosting → Cloud Run rewrite for `/api/**`)
+ *    - or `{ "baseUrl": "https://resolved-host.example" }` (subdomain must exist in DNS)
  * 3. `http://localhost:8787` for local dev
  */
 export function getBookingsApiBase(): Promise<string> {
@@ -30,7 +32,10 @@ export function getBookingsApiBase(): Promise<string> {
         try {
           const res = await fetch("/bookings-api.json", { cache: "no-store" })
           if (res.ok) {
-            const data = (await res.json()) as { baseUrl?: string }
+            const data = (await res.json()) as { baseUrl?: string; sameOriginApi?: boolean }
+            if (data.sameOriginApi === true && typeof window !== "undefined" && window.location?.origin) {
+              return normalizeApiBase(window.location.origin)
+            }
             const fromJson =
               typeof data.baseUrl === "string" ? normalizeApiBase(data.baseUrl) : ""
             if (fromJson.length > 0) {
