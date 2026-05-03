@@ -11,6 +11,7 @@ import {
   type VehicleSize,
 } from "../data/siteContent"
 import { formatKyd, getPriceBreakdown, getUnitPricesForVehicle } from "../lib/pricing"
+import { BOOKING_SAVE_ERROR } from "../lib/bookingErrors"
 import { getBookings, isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
 import {
   formatDisplayDate,
@@ -201,7 +202,7 @@ export function BookingSection() {
       return
     }
 
-    if (emailError === "missing_bookings_api_url") {
+    if (emailError === BOOKING_SAVE_ERROR.MISSING_API_URL) {
       setSubmitMessage(
         "Online booking is not connected to the server yet. Please WhatsApp or call us to book, or try again later.",
       )
@@ -212,10 +213,10 @@ export function BookingSection() {
     let emailNote = emailSent
       ? " We have also sent a confirmation email."
       : " If you do not receive the confirmation email check your spam folder."
-    if (!emailSent && emailError === "offline_local_storage") {
+    if (!emailSent && emailError === BOOKING_SAVE_ERROR.OFFLINE_LOCAL) {
       emailNote =
         " We could not reach the booking server—your visit is saved only on this device. Please message us on WhatsApp or call to confirm."
-    } else if (!emailSent && emailError && emailError !== "offline_local_storage") {
+    } else if (!emailSent && emailError && emailError !== BOOKING_SAVE_ERROR.OFFLINE_LOCAL) {
       emailNote =
         " Your booking was saved, but we could not send email from the server. We will still follow up—check spam or contact us if you hear nothing."
     }

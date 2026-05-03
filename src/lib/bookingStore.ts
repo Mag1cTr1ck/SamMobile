@@ -1,11 +1,13 @@
 import type { OperatorId, ServiceKey, VehicleSize } from "../data/siteContent"
+import { BOOKING_SAVE_ERROR, type BookingSaveErrorCode } from "./bookingErrors"
 import type { SlotId } from "./schedule"
 
 const BOOKINGS_KEY = "samc_bookings_v1"
 
 const LOCAL_DEV_API = "http://localhost:8787"
+/** From repo root `.env` at `vite build` time only (`VITE_BOOKINGS_API_BASE=...`). */
 const configuredApiBase = import.meta.env.VITE_BOOKINGS_API_BASE?.replace(/\/$/, "").trim()
-/** Public booking API (set `VITE_BOOKINGS_API_BASE` before production build). */
+/** Resolved API base URL (public URL in prod builds when `.env` is set). */
 export const BOOKINGS_API_BASE =
   configuredApiBase && configuredApiBase.length > 0 ? configuredApiBase : LOCAL_DEV_API
 
@@ -35,7 +37,8 @@ export type BookingRecord = {
 
 export type SaveBookingResult = {
   emailSent: boolean
-  emailError?: string
+  /** Client codes or server `sendBookingMails` reason strings. */
+  emailError?: BookingSaveErrorCode | string
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -92,7 +95,7 @@ export async function getBookings(): Promise<BookingRecord[]> {
 
 export async function saveBooking(booking: BookingRecord): Promise<SaveBookingResult> {
   if (import.meta.env.PROD && !hasPublicApiUrl) {
-    return { emailSent: false, emailError: "missing_bookings_api_url" }
+    return { emailSent: false, emailError: BOOKING_SAVE_ERROR.MISSING_API_URL }
   }
   try {
     const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`, {
@@ -127,6 +130,6 @@ export async function saveBooking(booking: BookingRecord): Promise<SaveBookingRe
       throw new Error("SLOT_TAKEN")
     }
     saveLocalBooking(booking)
-    return { emailSent: false, emailError: "offline_local_storage" }
+    return { emailSent: false, emailError: BOOKING_SAVE_ERROR.OFFLINE_LOCAL }
   }
 }

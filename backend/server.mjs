@@ -27,6 +27,26 @@ const dataDir = join(__dirname, "data")
 const csvPath = join(dataDir, "bookings.csv")
 const port = Number(process.env.PORT ?? 8787)
 
+const ROUTES = {
+  bookings: "/api/bookings",
+  health: "/health",
+}
+
+/** Guard against oversized JSON POST bodies. */
+const MAX_JSON_BODY_BYTES = 100 * 1024
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+}
+
+function requestPathname(req) {
+  const raw = req.url || "/"
+  const q = raw.indexOf("?")
+  return q === -1 ? raw : raw.slice(0, q)
+}
+
 const CSV_HEADERS = [
   "id",
   "createdAt",
@@ -141,9 +161,7 @@ function appendBooking(booking) {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    ...corsHeaders,
   })
   res.end(JSON.stringify(payload))
 }
@@ -168,26 +186,41 @@ ensureCsvFile()
 
 createServer((req, res) => {
   if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    })
+    res.writeHead(204, corsHeaders)
     res.end()
     return
   }
 
-  if (req.url === "/api/bookings" && req.method === "GET") {
+  const path = requestPathname(req)
+
+  if (path === ROUTES.health && req.method === "GET") {
+    sendJson(res, 200, { ok: true, service: "samsmobile-bookings" })
+    return
+  }
+
+  if (path === ROUTES.bookings && req.method === "GET") {
     sendJson(res, 200, readBookings())
     return
   }
 
-  if (req.url === "/api/bookings" && req.method === "POST") {
+  if (path === ROUTES.bookings && req.method === "POST") {
     let body = ""
+    let size = 0
+    let tooLarge = false
     req.on("data", (chunk) => {
+      if (tooLarge) return
+      size += chunk.length
+      if (size > MAX_JSON_BODY_BYTES) {
+        tooLarge = true
+        return
+      }
       body += chunk
     })
     req.on("end", async () => {
+      if (tooLarge) {
+        sendJson(res, 413, { error: "Request body too large." })
+        return
+      }
       try {
         const booking = JSON.parse(body || "{}")
         if (!validateBooking(booking)) {
@@ -212,8 +245,13 @@ createServer((req, res) => {
           emailSent: mailResult.sent === true,
           ...(mailResult.reason ? { emailError: mailResult.reason } : {}),
         })
-      } catch {
-        sendJson(res, 400, { error: "Malformed JSON payload." })
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          sendJson(res, 400, { error: "Malformed JSON payload." })
+          return
+        }
+        console.error("[bookings] POST /api/bookings failed:", err)
+        sendJson(res, 500, { error: "Server error while processing booking." })
       }
     })
     return
