@@ -646,6 +646,12 @@ textarea:focus::placeholder {
   color: #475569;
 }
 
+.guest-field-hint {
+  margin-top: -0.1rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .guest-contact-grid input {
   width: 100%;
   padding: 0.55rem 0.75rem;
