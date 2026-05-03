@@ -93,18 +93,30 @@ export async function getBookings(): Promise<BookingRecord[]> {
   }
 }
 
-export async function saveBooking(booking: BookingRecord): Promise<SaveBookingResult> {
+export async function saveBooking(
+  booking: BookingRecord,
+  options?: { recaptchaToken: string | null },
+): Promise<SaveBookingResult> {
   if (import.meta.env.PROD && !hasPublicApiUrl) {
     return { emailSent: false, emailError: BOOKING_SAVE_ERROR.MISSING_API_URL }
   }
+  const token = options?.recaptchaToken
+  const body =
+    token != null && token.length > 0
+      ? { ...booking, recaptchaToken: token }
+      : { ...booking }
+
   try {
     const res = await fetch(`${BOOKINGS_API_BASE}/api/bookings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(booking),
+      body: JSON.stringify(body),
     })
     if (res.status === 409) {
       throw new Error("SLOT_TAKEN")
+    }
+    if (res.status === 403) {
+      return { emailSent: false, emailError: BOOKING_SAVE_ERROR.RECAPTCHA_FAILED }
     }
     if (!res.ok) {
       throw new Error(`POST /api/bookings failed: ${res.status}`)

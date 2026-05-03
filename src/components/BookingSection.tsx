@@ -13,6 +13,7 @@ import {
 import { formatKyd, getPriceBreakdown, getUnitPricesForVehicle } from "../lib/pricing"
 import { BOOKING_SAVE_ERROR } from "../lib/bookingErrors"
 import { getBookings, isSlotTaken, saveBooking, type BookingRecord } from "../lib/bookingStore"
+import { getRecaptchaToken, isRecaptchaConfigured, loadRecaptchaScript } from "../lib/recaptcha"
 import {
   formatDisplayDate,
   getBookableDates,
@@ -121,6 +122,13 @@ export function BookingSection() {
     return () => window.clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    if (!isRecaptchaConfigured()) return
+    loadRecaptchaScript().catch(() => {
+      /* non-fatal until submit */
+    })
+  }, [])
+
   async function handleBook(e: FormEvent) {
     e.preventDefault()
     setSubmitMessage(null)
@@ -185,10 +193,23 @@ export function BookingSection() {
       contactPhone,
       contactEmail,
     }
+
+    let recaptchaToken: string | null = null
+    if (isRecaptchaConfigured()) {
+      try {
+        recaptchaToken = await getRecaptchaToken()
+      } catch {
+        setSubmitMessage(
+          "The security check could not run. Please refresh the page, wait a moment, and try again.",
+        )
+        return
+      }
+    }
+
     let emailSent = false
     let emailError: string | undefined
     try {
-      const saveResult = await saveBooking(record)
+      const saveResult = await saveBooking(record, { recaptchaToken })
       emailSent = saveResult.emailSent
       emailError = saveResult.emailError
     } catch (error) {
@@ -205,6 +226,13 @@ export function BookingSection() {
     if (emailError === BOOKING_SAVE_ERROR.MISSING_API_URL) {
       setSubmitMessage(
         "Online booking is not connected to the server yet. Please WhatsApp or call us to book, or try again later.",
+      )
+      return
+    }
+
+    if (emailError === BOOKING_SAVE_ERROR.RECAPTCHA_FAILED) {
+      setSubmitMessage(
+        "We could not verify the booking request. Please refresh the page and try again, or contact us by WhatsApp or phone.",
       )
       return
     }
@@ -560,6 +588,19 @@ export function BookingSection() {
           </div>
 
           <div className="booking-actions">
+            {isRecaptchaConfigured() && (
+              <p className="muted small recaptcha-terms">
+                This site is protected by reCAPTCHA and the Google{" "}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>{" "}
+                and{" "}
+                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">
+                  Terms of Service
+                </a>{" "}
+                apply.
+              </p>
+            )}
             <button type="submit" className="btn primary wide btn-stack">
               <span className="btn-stack-primary">Confirm booking</span>
               <span className="btn-stack-sub">We’ll follow up by email with your appointment details</span>

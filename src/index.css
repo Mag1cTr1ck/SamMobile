@@ -673,6 +673,12 @@ textarea:focus::placeholder {
   padding-top: 0.35rem;
 }
 
+.booking-actions .recaptcha-terms {
+  margin: 0 0 0.65rem;
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
 .booking-actions .form-success {
   margin-top: 0.65rem;
 }

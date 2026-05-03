@@ -166,6 +166,34 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+async function verifyRecaptchaToken(token, remoteIp) {
+  const secret = process.env.RECAPTCHA_SECRET_KEY?.trim()
+  if (!secret) {
+    return { ok: true, skipped: true }
+  }
+  if (!token) {
+    return { ok: false }
+  }
+  const params = new URLSearchParams()
+  params.set("secret", secret)
+  params.set("response", token)
+  if (remoteIp) params.set("remoteip", remoteIp)
+  const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  })
+  const data = await res.json()
+  if (!data.success) {
+    return { ok: false }
+  }
+  const minScore = Number.parseFloat(process.env.RECAPTCHA_MIN_SCORE ?? "0.35")
+  if (typeof data.score === "number" && Number.isFinite(minScore) && data.score < minScore) {
+    return { ok: false }
+  }
+  return { ok: true, skipped: false }
+}
+
 function validateBooking(booking) {
   const requiredFields = [
     "id",
@@ -222,7 +250,25 @@ createServer((req, res) => {
         return
       }
       try {
-        const booking = JSON.parse(body || "{}")
+        const raw = JSON.parse(body || "{}")
+        const recaptchaToken =
+          typeof raw.recaptchaToken === "string" ? raw.recaptchaToken.trim() : ""
+        delete raw.recaptchaToken
+        const booking = raw
+
+        const forwardedRaw = req.headers["x-forwarded-for"]
+        const forwarded = Array.isArray(forwardedRaw) ? forwardedRaw[0] : forwardedRaw
+        const remoteIp =
+          typeof forwarded === "string"
+            ? forwarded.split(",")[0]?.trim() || ""
+            : req.socket.remoteAddress || ""
+
+        const captchaOk = await verifyRecaptchaToken(recaptchaToken, remoteIp)
+        if (!captchaOk.ok) {
+          sendJson(res, 403, { error: "recaptcha_failed" })
+          return
+        }
+
         if (!validateBooking(booking)) {
           sendJson(res, 400, { error: "Invalid booking payload." })
           return
@@ -268,6 +314,13 @@ createServer((req, res) => {
   ) {
     console.log(
       "[bookings] MailerSend SMTP: configured (confirmation emails will be sent after each booking).",
+    )
+  }
+  if (process.env.RECAPTCHA_SECRET_KEY?.trim()) {
+    console.log("[bookings] reCAPTCHA: secret key loaded (POST /api/bookings will be verified).")
+  } else {
+    console.log(
+      "[bookings] reCAPTCHA: RECAPTCHA_SECRET_KEY not set — verification skipped (set for production).",
     )
   }
 })
