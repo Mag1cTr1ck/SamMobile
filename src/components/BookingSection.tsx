@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import {
   ADDON_SERVICE_KEYS,
   addonBookingOptions,
@@ -78,6 +78,9 @@ export function BookingSection() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   /** Bumps on an interval so “today’s” slot list refreshes as real time passes (memo was freezing it). */
   const [slotClockTick, setSlotClockTick] = useState(0)
+  /** Increment to re-run reCAPTCHA mount after a failed load or user retry. */
+  const [recaptchaLayoutKey, setRecaptchaLayoutKey] = useState(0)
+  const [recaptchaBootstrapError, setRecaptchaBootstrapError] = useState<string | null>(null)
 
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null)
   const recaptchaWidgetIdRef = useRef<number | null>(null)
@@ -137,17 +140,28 @@ export function BookingSection() {
     return () => window.clearInterval(id)
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isRecaptchaConfigured()) return
     const host = recaptchaContainerRef.current
     if (!host) return
     let cancelled = false
+    setRecaptchaBootstrapError(null)
     ;(async () => {
       try {
         const id = await renderRecaptchaCheckbox(host)
-        if (!cancelled) recaptchaWidgetIdRef.current = id
+        if (!cancelled) {
+          recaptchaWidgetIdRef.current = id
+          setRecaptchaBootstrapError(null)
+        }
       } catch {
-        /* submit path shows an error if the widget never appears */
+        if (!cancelled) {
+          const hn = typeof window !== "undefined" ? window.location.hostname : ""
+          setRecaptchaBootstrapError(
+            hn
+              ? `Could not load the security checkbox (${hn}). Try the button below, refresh, or another network.`
+              : "Could not load the security checkbox. Try the button below or refresh the page.",
+          )
+        }
       }
     })()
     return () => {
@@ -158,7 +172,7 @@ export function BookingSection() {
       }
       host.innerHTML = ""
     }
-  }, [])
+  }, [recaptchaLayoutKey])
 
   async function handleBook(e: FormEvent) {
     e.preventDefault()
@@ -251,8 +265,11 @@ export function BookingSection() {
           console.warn("[booking] reCAPTCHA widget missing — submitting without token")
           recaptchaToken = null
         } else {
+          const hn = typeof window !== "undefined" ? window.location.hostname : ""
           setSubmitMessage(
-            "The security check could not load. Try again in a moment, use another network, or turn off strict ad blockers. In Google reCAPTCHA admin, add this site’s hostname (e.g. samsmobile.ky and www). If it still fails, contact us on WhatsApp.",
+            hn
+              ? `The security check is not ready yet (${hn}). Use “Try loading again” under the booking form if you see it, hard-refresh the page (Ctrl+Shift+R), or try without an ad blocker. If you use a custom domain and Firebase’s .web.app URL, both must be listed in Google reCAPTCHA for your key. WhatsApp us if it persists.`
+              : "The security check is not ready yet. Refresh the page or try “Try loading again” if it appears above the confirm button.",
           )
           return
         }
@@ -680,11 +697,29 @@ export function BookingSection() {
           </div>
 
           {isRecaptchaConfigured() && (
-            <div
-              className="booking-recaptcha-host"
-              ref={recaptchaContainerRef}
-              aria-label="Security verification"
-            />
+            <>
+              <div
+                key={recaptchaLayoutKey}
+                className="booking-recaptcha-host"
+                ref={recaptchaContainerRef}
+                aria-label="Security verification"
+              />
+              {recaptchaBootstrapError && (
+                <p className="muted small booking-recaptcha-retry">
+                  {recaptchaBootstrapError}{" "}
+                  <button
+                    type="button"
+                    className="btn ghost small booking-recaptcha-retry-btn"
+                    onClick={() => {
+                      setRecaptchaBootstrapError(null)
+                      setRecaptchaLayoutKey((k) => k + 1)
+                    }}
+                  >
+                    Try loading again
+                  </button>
+                </p>
+              )}
+            </>
           )}
 
           <div className="booking-actions">

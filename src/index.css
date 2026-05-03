@@ -679,6 +679,17 @@ textarea:focus::placeholder {
   min-height: 4.9rem;
 }
 
+.booking-recaptcha-retry {
+  margin: 0.5rem 0 0;
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
+.booking-recaptcha-retry-btn {
+  margin-left: 0.35rem;
+  vertical-align: baseline;
+}
+
 .booking-actions {
   margin-top: 1.1rem;
   padding-top: 0.35rem;

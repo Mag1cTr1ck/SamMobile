@@ -47,10 +47,39 @@ function injectScript(src: string): Promise<void> {
 
 let scriptLoadPromise: Promise<void> | null = null
 
+/** v3 uses `?render=<siteKey>`; v2 explicit uses `?render=explicit`. Reusing a v3 tag breaks `grecaptcha.render`. */
+function removeIncompatibleRecaptchaScripts(): void {
+  let removed = false
+  for (const el of document.querySelectorAll('script[src*="recaptcha/api.js"]')) {
+    if (!(el instanceof HTMLScriptElement)) continue
+    const src = el.src || el.getAttribute("src") || ""
+    if (!src.includes("render=explicit")) {
+      el.remove()
+      removed = true
+    }
+  }
+  if (removed) {
+    scriptLoadPromise = null
+  }
+}
+
+/** Removing the v3 script tag does not unload the global; drop it so the v2 bundle can define `render`. */
+function clearStaleGrecaptchaGlobal(): void {
+  const g = window.grecaptcha
+  if (!g || typeof g.render === "function") return
+  try {
+    delete (window as Window & { grecaptcha?: unknown }).grecaptcha
+  } catch {
+    ;(window as Window & { grecaptcha?: unknown }).grecaptcha = undefined
+  }
+}
+
 /** Loads reCAPTCHA v2 API (`render=explicit` — widget is created via {@link renderRecaptchaCheckbox}). */
 export function loadRecaptchaScript(): Promise<void> {
   if (!SITE_KEY) return Promise.resolve()
   if (typeof window === "undefined") return Promise.resolve()
+  removeIncompatibleRecaptchaScripts()
+  clearStaleGrecaptchaGlobal()
   if (isGrecaptchaReady()) return Promise.resolve()
 
   if (!scriptLoadPromise) {
@@ -76,8 +105,10 @@ export function loadRecaptchaScript(): Promise<void> {
 }
 
 async function loadRecaptchaNetFallback(): Promise<void> {
+  removeIncompatibleRecaptchaScripts()
   document.querySelectorAll('script[src*="recaptcha/api.js"]').forEach((el) => el.remove())
   scriptLoadPromise = null
+  clearStaleGrecaptchaGlobal()
   const url = "https://www.recaptcha.net/recaptcha/api.js?render=explicit"
   await injectScript(url)
   await waitForGrecaptcha()
@@ -86,6 +117,9 @@ async function loadRecaptchaNetFallback(): Promise<void> {
 /** Renders the checkbox into `container` (empty element). Resolves with widget id for {@link getRecaptchaResponse} / {@link resetRecaptchaWidget}. */
 export async function renderRecaptchaCheckbox(container: HTMLElement): Promise<number> {
   if (!SITE_KEY) throw new Error("recaptcha_not_configured")
+  if (container.isConnected && container.innerHTML.trim() !== "") {
+    container.innerHTML = ""
+  }
   try {
     await loadRecaptchaScript()
   } catch {
