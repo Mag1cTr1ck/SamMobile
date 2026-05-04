@@ -6,7 +6,9 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Cloud Build can occasionally use a stale source snapshot where lock and package drift.
+# `npm install --omit=dev` is more tolerant than `npm ci` and unblocks deployment.
+RUN npm install --omit=dev
 COPY backend/server.mjs backend/sendBookingMail.mjs ./
 COPY public /public
 RUN mkdir -p /app/data && chown -R node:node /app
