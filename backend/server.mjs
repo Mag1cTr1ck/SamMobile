@@ -35,10 +35,23 @@ const ROUTES = {
 /** Guard against oversized JSON POST bodies. */
 const MAX_JSON_BODY_BYTES = 100 * 1024
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+/** CORS for browser clients (e.g. samsmobile.ky → run.app). Reflect Origin when sent; echo preflight headers. */
+function corsHeaders(req) {
+  const origin = req.headers.origin
+  const allowOrigin =
+    typeof origin === "string" && origin.length > 0 ? origin : "*"
+  const reqHdrRaw = req.headers["access-control-request-headers"]
+  const allowHeaders =
+    typeof reqHdrRaw === "string" && reqHdrRaw.trim().length > 0
+      ? reqHdrRaw
+      : "Content-Type"
+  return {
+    Vary: "Origin",
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": allowHeaders,
+    "Access-Control-Max-Age": "86400",
+  }
 }
 
 function requestPathname(req) {
@@ -158,10 +171,10 @@ function appendBooking(booking) {
   appendFileSync(csvPath, `${fields.map(csvEscape).join(",")}\n`, "utf8")
 }
 
-function sendJson(res, statusCode, payload) {
+function sendJson(req, res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    ...corsHeaders,
+    ...corsHeaders(req),
   })
   res.end(JSON.stringify(payload))
 }
@@ -231,7 +244,7 @@ ensureCsvFile()
 
 createServer((req, res) => {
   if (req.method === "OPTIONS") {
-    res.writeHead(204, corsHeaders)
+    res.writeHead(204, corsHeaders(req))
     res.end()
     return
   }
@@ -239,12 +252,12 @@ createServer((req, res) => {
   const path = requestPathname(req)
 
   if (path === ROUTES.health && req.method === "GET") {
-    sendJson(res, 200, { ok: true, service: "samsmobile-bookings" })
+    sendJson(req, res, 200, { ok: true, service: "samsmobile-bookings" })
     return
   }
 
   if (path === ROUTES.bookings && req.method === "GET") {
-    sendJson(res, 200, readBookings())
+    sendJson(req, res, 200, readBookings())
     return
   }
 
@@ -263,7 +276,7 @@ createServer((req, res) => {
     })
     req.on("end", async () => {
       if (tooLarge) {
-        sendJson(res, 413, { error: "Request body too large." })
+        sendJson(req, res, 413, { error: "Request body too large." })
         return
       }
       try {
@@ -282,16 +295,16 @@ createServer((req, res) => {
 
         const captchaOk = await verifyRecaptchaToken(recaptchaToken, remoteIp)
         if (!captchaOk.ok) {
-          sendJson(res, 403, { error: "recaptcha_failed" })
+          sendJson(req, res, 403, { error: "recaptcha_failed" })
           return
         }
 
         const bookingValidation = validateBooking(booking)
         if (!bookingValidation.ok) {
           if (bookingValidation.error === "invalid_phone") {
-            sendJson(res, 400, { error: "Invalid phone number.", code: "invalid_phone" })
+            sendJson(req, res, 400, { error: "Invalid phone number.", code: "invalid_phone" })
           } else {
-            sendJson(res, 400, { error: "Invalid booking payload." })
+            sendJson(req, res, 400, { error: "Invalid booking payload." })
           }
           return
         }
@@ -303,12 +316,12 @@ createServer((req, res) => {
             b.slotId === booking.slotId,
         )
         if (conflict) {
-          sendJson(res, 409, { error: "Slot is already booked." })
+          sendJson(req, res, 409, { error: "Slot is already booked." })
           return
         }
         appendBooking(booking)
         const mailResult = await sendBookingMails(booking)
-        sendJson(res, 201, {
+        sendJson(req, res, 201, {
           ok: true,
           emailSent: mailResult.sent === true,
           ...(typeof mailResult.businessNotified === "boolean"
@@ -318,17 +331,17 @@ createServer((req, res) => {
         })
       } catch (err) {
         if (err instanceof SyntaxError) {
-          sendJson(res, 400, { error: "Malformed JSON payload." })
+          sendJson(req, res, 400, { error: "Malformed JSON payload." })
           return
         }
         console.error("[bookings] POST /api/bookings failed:", err)
-        sendJson(res, 500, { error: "Server error while processing booking." })
+        sendJson(req, res, 500, { error: "Server error while processing booking." })
       }
     })
     return
   }
 
-  sendJson(res, 404, { error: "Not found" })
+  sendJson(req, res, 404, { error: "Not found" })
 }).listen(port, "0.0.0.0", () => {
   console.log(`Bookings API listening on port ${port} (bind 0.0.0.0)`)
   console.log(`CSV file: ${csvPath}`)
